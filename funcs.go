@@ -416,9 +416,15 @@ func (f *curryingFunctor) Call(additional ...reflect.Value) (reflect.Value, erro
 	if argCount > numIn && !f.typ.IsVariadic() {
 		return reflect.Value{}, fmt.Errorf("wrong number of args: got %d want %d", len(f.args), numIn)
 	}
-	newArgs := make([]reflect.Value, argCount)
-	copy(newArgs, f.args)
-	copy(newArgs[len(f.args):], additional)
+	var newArgs []reflect.Value
+	if len(f.args) == 0 {
+		// Optimization, because this is always the case when currying starts.
+		newArgs = additional
+	} else {
+		newArgs = make([]reflect.Value, argCount)
+		copy(newArgs, f.args)
+		copy(newArgs[len(f.args):], additional)
+	}
 	if argCount < numIn {
 		var r Functor
 		r = &curryingFunctor{typ: f.typ, fun: f.fun, args: newArgs}
@@ -527,16 +533,23 @@ func not(arg reflect.Value) bool {
 
 // Map, reduec etc.
 
-func mapFunc(fun reflect.Value, list []reflect.Value) (reflect.Value, error) {
-	result := make([]reflect.Value, 0, len(list))
+func mapFunc(fun Functor, list reflect.Value) (reflect.Value, error) {
 	args := make([]reflect.Value, 1)
-	for i, arg := range list {
-		args[0] = reflect.ValueOf(arg)
-		var err error
-		result[i], err = safeCall(fun, args)
-		if err != nil {
-			return reflect.Value{}, err
+	var result []reflect.Value
+	typ := list.Type()
+	if typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
+		l := list.Len()
+		result = make([]reflect.Value, l)
+		for i := 0; i < l; i++ {
+			args[0] = list.Index(i)
+			var err error
+			result[i], err = fun.Call(args...)
+			if err != nil {
+				return reflect.Value{}, err
+			}
 		}
+	} else {
+		return reflect.Value{}, fmt.Errorf("`map` expects a slice or array as second argument")
 	}
 	return reflect.ValueOf(result), nil
 }
