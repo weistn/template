@@ -21,3 +21,29 @@ In this example, the function `prefix` expects two arguments: the length of the 
 The term `prefix 1` provides only one argument. Thus, the result is a new function that expects a string as input.
 This function is now applied by `map` to all elements of the list. The intermediate result is `["H", "H", "G"]`.
 The remaining pipeline is used to form a sorted unique set of strings.
+
+The same result can be achieved without currying, but currying allows for more readable code.
+
+```
+map `(prefix 1 .) | uniq | sort
+```
+
+Here ``\``` indicates that the following expression should be treated like a new function.
+This new function has only one parameter that is accessed via the `dot` operator.
+
+However, the differences between the ``\`(...)`` syntax and currying is more than syntax.
+In the case of currying, the arguments are evaluated when the function is defined.
+In the case of a function, the arguments are evaliated when the function is executed.
+
+```Go
+$v := "A"
+$c := hasPrefix $v
+
+$v = "B"
+$f := `(hasPrefix $v .)
+
+/* Now the following conditions hold */
+
+$f "A"  // false, because the first argumnent to hasPrefix is $v and that is "B" currently.
+$c "A"  // true, because the first argument to hasPrefix is "A".
+```
