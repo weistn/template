@@ -320,7 +320,7 @@ func call(fn reflect.Value, args ...reflect.Value) (reflect.Value, error) {
 	}
 	typ := fn.Type()
 	var f Functor
-	fixNumIn := 0
+	functorArgsCount := 0
 	if typ.Kind() != reflect.Func {
 		if typ.Kind() == reflect.Ptr {
 			var ok bool
@@ -329,7 +329,7 @@ func call(fn reflect.Value, args ...reflect.Value) (reflect.Value, error) {
 				return reflect.Value{}, fmt.Errorf("non-function of type %s", typ)
 			}
 			typ = f.Type()
-			fixNumIn = f.FixNumIn()
+			functorArgsCount = f.ArgsCount()
 			fn = f.Function()
 		} else {
 			return reflect.Value{}, fmt.Errorf("non-function of type %s", typ)
@@ -347,7 +347,7 @@ func call(fn reflect.Value, args ...reflect.Value) (reflect.Value, error) {
 		//		}
 		dddType = typ.In(numIn - 1).Elem()
 	} else {
-		if fixNumIn+len(args) > numIn {
+		if functorArgsCount+len(args) > numIn {
 			return reflect.Value{}, fmt.Errorf("wrong number of args: got %d want %d", len(args), numIn)
 		}
 	}
@@ -356,8 +356,8 @@ func call(fn reflect.Value, args ...reflect.Value) (reflect.Value, error) {
 		arg = indirectInterface(arg)
 		// Compute the expected type. Clumsy because of variadics.
 		argType := dddType
-		if !typ.IsVariadic() || fixNumIn+i < numIn-1 {
-			argType = typ.In(fixNumIn + i)
+		if !typ.IsVariadic() || functorArgsCount+i < numIn-1 {
+			argType = typ.In(functorArgsCount + i)
 		}
 
 		var err error
@@ -365,12 +365,12 @@ func call(fn reflect.Value, args ...reflect.Value) (reflect.Value, error) {
 			return reflect.Value{}, fmt.Errorf("arg %d: %s", i, err)
 		}
 	}
-	// Start currying?
-	if len(argv) < numIn {
-		if f == nil {
-			return reflect.ValueOf(newFunctor(fn, typ, args)), nil
-		}
+	if f != nil {
+		// Call the functor
 		return f.Call(args...)
+	} else if len(argv) < numIn {
+		// Start currying
+		return reflect.ValueOf(newCurryingFunctor(fn, typ, args)), nil
 	}
 	return safeCall(fn, argv)
 }
@@ -378,35 +378,39 @@ func call(fn reflect.Value, args ...reflect.Value) (reflect.Value, error) {
 // Functor is the interface of an object that behaves like a function.
 type Functor interface {
 	Call(additional ...reflect.Value) (reflect.Value, error)
+	// Type returns the function type of the underlying function
 	Type() reflect.Type
+	// Function returns the underlying function
 	Function() reflect.Value
-	FixNumIn() int
+	// ArgsCount returns the number of arguments to the function type that
+	// are already stored in the Functor (i.e. due to currying).
+	ArgsCount() int
 }
 
-// functor implements the Functor interface.
-type functor struct {
+// curryingFunctor implements the Functor interface.
+type curryingFunctor struct {
 	typ  reflect.Type
 	fun  reflect.Value
 	args []reflect.Value
 }
 
-func newFunctor(fn reflect.Value, typ reflect.Type, args []reflect.Value) Functor {
-	return &functor{fun: fn, typ: typ, args: args}
+func newCurryingFunctor(fn reflect.Value, typ reflect.Type, args []reflect.Value) Functor {
+	return &curryingFunctor{fun: fn, typ: typ, args: args}
 }
 
-func (f *functor) Function() reflect.Value {
+func (f *curryingFunctor) Function() reflect.Value {
 	return f.fun
 }
 
-func (f *functor) Type() reflect.Type {
+func (f *curryingFunctor) Type() reflect.Type {
 	return f.typ
 }
 
-func (f *functor) FixNumIn() int {
+func (f *curryingFunctor) ArgsCount() int {
 	return len(f.args)
 }
 
-func (f *functor) Call(additional ...reflect.Value) (reflect.Value, error) {
+func (f *curryingFunctor) Call(additional ...reflect.Value) (reflect.Value, error) {
 	argCount := len(f.args) + len(additional)
 	numIn := f.typ.NumIn()
 	if argCount > numIn && !f.typ.IsVariadic() {
@@ -417,7 +421,7 @@ func (f *functor) Call(additional ...reflect.Value) (reflect.Value, error) {
 	copy(newArgs[len(f.args):], additional)
 	if argCount < numIn {
 		var r Functor
-		r = &functor{typ: f.typ, fun: f.fun, args: newArgs}
+		r = &curryingFunctor{typ: f.typ, fun: f.fun, args: newArgs}
 		return reflect.ValueOf(r), nil
 	}
 	return safeCall(f.fun, newArgs)

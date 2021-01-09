@@ -21,11 +21,7 @@ func withFunctor(f Functor) (reflect.Value, error) {
 }
 
 func TestFunctor(t *testing.T) {
-	funcMap := FuncMap{
-		"threeAdic": threeAdic,
-	}
-	// template, err := New("root").Delims("{{", "}}").Funcs(funcMap).Parse("Hello {{ $one := call threeAdic 2 }} {{ $two := call $one 3 }} {{ printf \"Depp\" }}")
-	template, err := New("root").Delims("{{", "}}").Funcs(funcMap).Parse("{{ $one := call . 2 }}{{ $two := call $one 3 }}{{ call $two 4 }}")
+	template, err := New("root").Delims("{{", "}}").Parse("{{ $one := call . 2 }}{{ $two := call $one 3 }}{{ call $two 4 }}")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,10 +36,11 @@ func TestFunctor(t *testing.T) {
 	}
 }
 
+// Test that a Go function can be passed as argument to another function, which expects a Functor instead of a
+// go function as argument. The template engine will automatically wrap the Go function inside a Functor.
 func TestFunctor2(t *testing.T) {
 	funcMap := FuncMap{
-		"threeAdic": threeAdic,
-		"fn":        withFunctor,
+		"fn": withFunctor,
 	}
 	// template, err := New("root").Delims("{{", "}}").Funcs(funcMap).Parse("Hello {{ $one := call threeAdic 2 }} {{ $two := call $one 3 }} {{ printf \"Depp\" }}")
 	template, err := New("root").Delims("{{", "}}").Funcs(funcMap).Parse("{{ fn . }}")
@@ -56,6 +53,25 @@ func TestFunctor2(t *testing.T) {
 		t.Fatal(err)
 	}
 	if w.String() != "6" {
+		println(">>>>" + w.String() + "<<<<<")
+		t.Fatal(w.String())
+	}
+}
+
+func TestFunctor3(t *testing.T) {
+	funcMap := FuncMap{
+		"threeAdic": threeAdic,
+	}
+	template, err := New("root").Delims("{{", "}}").Funcs(funcMap).Parse("{{ $one := threeAdic 2 }}{{ $two := call $one 3 }}{{ call $two 4 }}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := bytes.NewBuffer(nil)
+	err = template.Execute(w, threeAdic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.String() != "9" {
 		println(">>>>" + w.String() + "<<<<<")
 		t.Fatal(w.String())
 	}

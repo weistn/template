@@ -672,29 +672,42 @@ func (s *state) evalCall(dot, fun reflect.Value, node parse.Node, name string, a
 		args = args[1:] // Zeroth arg is function name/node; not passed to function.
 	}
 	typ := fun.Type()
-	numIn := len(args)
+	argsCount := len(args)
 	if final != missingVal {
-		numIn++
+		argsCount++
 	}
+	// Number of arguments that corresponds to a fixed parameter list
 	numFixed := len(args)
+	var f Functor
+	functorArgsCount := 0
+	if typ.Kind() == reflect.Ptr {
+		var ok bool
+		f, ok = fun.Interface().(Functor)
+		if !ok {
+			s.errorf("non-function of type %s", typ)
+		}
+		typ = f.Type()
+		functorArgsCount = f.ArgsCount()
+		fun = f.Function()
+	}
 	if typ.IsVariadic() {
-		numFixed = typ.NumIn() - 1 // last arg is the variadic one.
+		numFixed = typ.NumIn() - functorArgsCount - 1 // last arg is the variadic one.
 		//		if numIn < numFixed {
 		//			s.errorf("wrong number of args for %s: want at least %d got %d", name, typ.NumIn()-1, len(args))
 		//		}
-	} else if numIn > typ.NumIn() {
-		s.errorf("wrong number of args for %s: want %d got %d", name, typ.NumIn(), numIn)
+	} else if functorArgsCount+argsCount > typ.NumIn() {
+		s.errorf("wrong number of args for %s: want %d got %d", name, typ.NumIn(), argsCount)
 	}
 	if !goodFunc(typ) {
 		// TODO: This could still be a confusing error; maybe goodFunc should provide info.
 		s.errorf("can't call method/function %q with %d results", name, typ.NumOut())
 	}
 	// Build the arg list.
-	argv := make([]reflect.Value, numIn)
+	argv := make([]reflect.Value, argsCount)
 	// Args must be evaluated. Fixed args first.
 	i := 0
 	for ; i < numFixed && i < len(args); i++ {
-		argv[i] = s.evalArg(dot, typ.In(i), args[i])
+		argv[i] = s.evalArg(dot, typ.In(functorArgsCount+i), args[i])
 	}
 	// Now the ... args.
 	if typ.IsVariadic() {
@@ -705,25 +718,30 @@ func (s *state) evalCall(dot, fun reflect.Value, node parse.Node, name string, a
 	}
 	// Add final value if necessary.
 	if final != missingVal {
-		t := typ.In(typ.NumIn() - 1)
+		var t reflect.Type
 		if typ.IsVariadic() {
-			if numIn-1 < numFixed {
+			if functorArgsCount+argsCount-1 < numFixed {
 				// The added final argument corresponds to a fixed parameter of the function.
 				// Validate against the type of the actual parameter.
-				t = typ.In(numIn - 1)
+				t = typ.In(functorArgsCount + argsCount)
 			} else {
 				// The added final argument corresponds to the variadic part.
 				// Validate against the type of the elements of the variadic slice.
-				t = t.Elem()
+				t = typ.In(typ.NumIn() - 1).Elem()
 			}
+		} else {
+			t = typ.In(functorArgsCount + argsCount)
 		}
 		argv[i] = s.validateType(final, t)
 	}
 	var v reflect.Value
 	var err error
-	// Currying?
-	if len(argv) < numIn {
-		panic("TODO")
+	if f != nil {
+		// Call the functor
+		v, err = f.Call(argv...)
+	} else if len(argv) < typ.NumIn() {
+		// Start currying
+		v = reflect.ValueOf(newCurryingFunctor(fun, typ, argv))
 	} else {
 		v, err = safeCall(fun, argv)
 	}
@@ -769,8 +787,10 @@ func (s *state) validateType(value reflect.Value, typ reflect.Type) reflect.Valu
 	if typ != nil && !value.Type().AssignableTo(typ) {
 		if value.Kind() == reflect.Func && typ.Kind() == reflect.Interface {
 			if typ.Implements(reflect.TypeOf((*Functor)(nil)).Elem()) {
+				// The function expects a Functor type, not a Go function type.
+				// Just wrap the Go function in a Functor.
 				var r Functor
-				r = &functor{fun: value, typ: value.Type(), args: nil}
+				r = &curryingFunctor{fun: value, typ: value.Type(), args: nil}
 				return reflect.ValueOf(r)
 			}
 		}
