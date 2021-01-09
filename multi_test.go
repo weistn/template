@@ -10,7 +10,8 @@ import (
 	"bytes"
 	"fmt"
 	"testing"
-	"text/template/parse"
+
+	"github.com/weistn/template/parse"
 )
 
 const (

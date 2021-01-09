@@ -10,7 +10,8 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
-	"text/template/parse"
+
+	"github.com/weistn/template/parse"
 )
 
 // maxExecDepth specifies the maximum stack depth of templates within
