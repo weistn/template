@@ -8,7 +8,6 @@ import (
 )
 
 func threeAdic(a int, b int, c int) int {
-	println("Hello from threeAdic")
 	return a + b + c
 }
 
@@ -16,7 +15,6 @@ func withFunctor(f Functor) (reflect.Value, error) {
 	if f == nil {
 		return reflect.Value{}, fmt.Errorf("No functor")
 	}
-	println("Hello from withFunctor")
 	return f.Call(reflect.ValueOf(1), reflect.ValueOf(2), reflect.ValueOf(3))
 }
 
@@ -57,7 +55,6 @@ func TestFunctorConversion(t *testing.T) {
 		t.Fatal(err)
 	}
 	if w.String() != "6" {
-		println(">>>>" + w.String() + "<<<<<")
 		t.Fatal(w.String())
 	}
 }
@@ -76,7 +73,6 @@ func TestEvalFunctor(t *testing.T) {
 		t.Fatal(err)
 	}
 	if w.String() != "9" {
-		println(">>>>" + w.String() + "<<<<<")
 		t.Fatal(w.String())
 	}
 }
@@ -95,7 +91,6 @@ func TestMapFunc(t *testing.T) {
 		t.Fatal(err)
 	}
 	if w.String() != "Hcw" {
-		println(">>>>" + w.String() + "<<<<<")
 		t.Fatal(w.String())
 	}
 }

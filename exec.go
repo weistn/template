@@ -667,7 +667,6 @@ var (
 // it looks just like a function call. The arg list, if non-nil, includes (in the manner of the shell), arg[0]
 // as the function itself.
 func (s *state) evalCall(dot, fun reflect.Value, node parse.Node, name string, args []parse.Node, final reflect.Value) reflect.Value {
-	println("Eval call")
 	if args != nil {
 		args = args[1:] // Zeroth arg is function name/node; not passed to function.
 	}

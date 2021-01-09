@@ -313,7 +313,6 @@ func length(item reflect.Value) (int, error) {
 // call returns the result of evaluating the first argument as a function.
 // The function must return 1 result, or 2 results, the second of which is an error.
 func call(fn reflect.Value, args ...reflect.Value) (reflect.Value, error) {
-	println("Call ...")
 	fn = indirectInterface(fn)
 	if !fn.IsValid() {
 		return reflect.Value{}, fmt.Errorf("call of nil")
