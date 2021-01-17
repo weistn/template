@@ -83,3 +83,23 @@ reduce &(add $0 $1) .
 Here, `&(add $0 $1)` is a lambda function that consumes two parameters.
 The `&(...)` operator will keep the template engine from evaluating the following term immediately and
 wraps it in a function instead.
+
+# Functions
+
+The package defines three new functions: `map`, `reduce`, `filter`.
+
+The `map` function expects as first argument a function that expects one parameter and returns a value.
+The second argument must be a slice or array.
+`map` passes each element of its input through the provided function and returns a list of the results.
+
+The `reduce` function expects as first argument a function that expects two parameters and returns a value.
+The second argument must be a slice or array.
+`reduce` calls the function with the first two elements of its input.
+Then it calls the functio again, using the previous result and the third element, and so on.
+If the input contains only one element, `reduce` returns this element.
+If the input is empty, `reduce` returns an empty list.
+
+The `filter` function expects as first argument a function that expects one parameter and returns a boolean value.
+The second argument must be a slice or array.
+`filter` passes each element of its input through the provided function.
+Elements for which the function returns false are dropped from the result.
