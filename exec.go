@@ -677,6 +677,7 @@ func (s *state) evalCall(dot, fun reflect.Value, node parse.Node, name string, a
 	}
 	// Number of arguments that corresponds to a fixed parameter list
 	numFixed := len(args)
+	minNumIn := typ.NumIn()
 	var f Functor
 	functorArgsCount := 0
 	if typ.Kind() == reflect.Ptr {
@@ -691,9 +692,7 @@ func (s *state) evalCall(dot, fun reflect.Value, node parse.Node, name string, a
 	}
 	if typ.IsVariadic() {
 		numFixed = typ.NumIn() - functorArgsCount - 1 // last arg is the variadic one.
-		//		if numIn < numFixed {
-		//			s.errorf("wrong number of args for %s: want at least %d got %d", name, typ.NumIn()-1, len(args))
-		//		}
+		minNumIn--
 	} else if functorArgsCount+argsCount > typ.NumIn() {
 		s.errorf("wrong number of args for %s: want %d got %d", name, typ.NumIn(), argsCount)
 	}
@@ -738,8 +737,8 @@ func (s *state) evalCall(dot, fun reflect.Value, node parse.Node, name string, a
 	if f != nil {
 		// Call the functor
 		v, err = f.Call(argv...)
-	} else if len(argv) < typ.NumIn() {
-		// Start currying
+	} else if len(argv) < minNumIn {
+		// Start currying, because some required arguments are missing
 		v = reflect.ValueOf(newCurryingFunctor(fun, typ, argv))
 	} else {
 		v, err = safeCall(fun, argv)
@@ -789,7 +788,7 @@ func (s *state) validateType(value reflect.Value, typ reflect.Type) reflect.Valu
 				// The function expects a Functor type, not a Go function type.
 				// Just wrap the Go function in a Functor.
 				var r Functor
-				r = &curryingFunctor{fun: value, typ: value.Type(), args: nil}
+				r = &functor{fun: value, typ: value.Type(), args: nil}
 				return reflect.ValueOf(r)
 			}
 		}
@@ -839,6 +838,8 @@ func (s *state) evalArg(dot reflect.Value, typ reflect.Type, n parse.Node) refle
 		return s.validateType(s.evalFunction(dot, arg, arg, nil, missingVal), typ)
 	case *parse.ChainNode:
 		return s.validateType(s.evalChainNode(dot, arg, nil, missingVal), typ)
+	case *parse.LambdaNode:
+		return reflect.ValueOf(newLambdaFunctor(s, arg))
 	}
 	switch typ.Kind() {
 	case reflect.Bool:

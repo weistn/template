@@ -70,6 +70,7 @@ const (
 	itemRange    // range keyword
 	itemTemplate // template keyword
 	itemWith     // with keyword
+	itemLambda   // lambda function
 )
 
 var key = map[string]itemType{
@@ -83,6 +84,7 @@ var key = map[string]itemType{
 	"nil":      itemNil,
 	"template": itemTemplate,
 	"with":     itemWith,
+	"&":        itemLambda,
 }
 
 const eof = -1
@@ -397,6 +399,8 @@ func lexInsideAction(l *lexer) stateFn {
 	case r == '+' || r == '-' || ('0' <= r && r <= '9'):
 		l.backup()
 		return lexNumber
+	case r == '&':
+		l.emit(itemLambda)
 	case isAlphaNumeric(r):
 		l.backup()
 		return lexIdentifier
@@ -524,7 +528,7 @@ func (l *lexer) atTerminator() bool {
 		return true
 	}
 	switch r {
-	case eof, '.', ',', '|', ':', ')', '(':
+	case eof, '.', ',', '|', ':', ')', '(', '&':
 		return true
 	}
 	// Does r start the delimiter? This can be ambiguous (with delim=="//", $x/2 will

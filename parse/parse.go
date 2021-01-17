@@ -29,6 +29,7 @@ type Tree struct {
 	peekCount int
 	vars      []string // variables defined at the moment.
 	treeSet   map[string]*Tree
+	inLambda  bool
 }
 
 // Copy returns a copy of the Tree. Any parsing state is discarded.
@@ -624,6 +625,9 @@ func (t *Tree) operand() Node {
 	if node == nil {
 		return nil
 	}
+	if node.Type() == NodeLambda {
+		return node
+	}
 	if t.peek().typ == itemField {
 		chain := t.newChain(t.peek().pos, node)
 		for t.peek().typ == itemField {
@@ -694,6 +698,19 @@ func (t *Tree) term() Node {
 			t.error(err)
 		}
 		return t.newString(token.pos, token.val, s)
+	case itemLambda:
+		inlambda := t.inLambda
+		t.inLambda = true
+		if token := t.next(); token.typ != itemLeftParen {
+			t.errorf("expected left paren in lambda expression: unexpected %s", token)
+		}
+		pipe := t.pipeline("parenthesized pipeline")
+		if token := t.next(); token.typ != itemRightParen {
+			t.errorf("unclosed right paren in lambda expression: unexpected %s", token)
+		}
+		t.inLambda = inlambda
+		l := t.newLambda(token.pos, pipe)
+		return l
 	}
 	t.backup()
 	return nil
@@ -723,6 +740,19 @@ func (t *Tree) useVar(pos Pos, name string) Node {
 	v := t.newVariable(pos, name)
 	for _, varName := range t.vars {
 		if varName == v.Ident[0] {
+			return v
+		}
+	}
+	// Variables of the form "$0", "$1" etc. are available inside lambda functions.
+	if name[0] == '$' && t.inLambda {
+		ok := true
+		for i := 1; i < len(name); i++ {
+			if name[i] < '0' || name[i] > '9' {
+				ok = false
+				break
+			}
+		}
+		if ok {
 			return v
 		}
 	}

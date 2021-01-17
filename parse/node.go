@@ -70,6 +70,7 @@ const (
 	NodeTemplate                   // A template invocation action.
 	NodeVariable                   // A $ variable.
 	NodeWith                       // A with action.
+	NodeLambda                     // A lambda function.
 )
 
 // Nodes.
@@ -541,6 +542,38 @@ func (c *ChainNode) tree() *Tree {
 
 func (c *ChainNode) Copy() Node {
 	return &ChainNode{tr: c.tr, NodeType: NodeChain, Pos: c.Pos, Node: c.Node, Field: append([]string{}, c.Field...)}
+}
+
+type LambdaNode struct {
+	NodeType
+	Pos
+	tr   *Tree
+	Node *PipeNode
+}
+
+func (t *Tree) newLambda(pos Pos, node *PipeNode) *LambdaNode {
+	return &LambdaNode{tr: t, NodeType: NodeLambda, Pos: pos, Node: node}
+}
+
+func (c *LambdaNode) String() string {
+	var sb strings.Builder
+	c.writeTo(&sb)
+	return sb.String()
+}
+
+func (c *LambdaNode) writeTo(sb *strings.Builder) {
+	sb.WriteByte('`')
+	sb.WriteByte('(')
+	c.Node.writeTo(sb)
+	sb.WriteByte(')')
+}
+
+func (c *LambdaNode) tree() *Tree {
+	return c.tr
+}
+
+func (c *LambdaNode) Copy() Node {
+	return &LambdaNode{tr: c.tr, NodeType: NodeLambda, Pos: c.Pos, Node: c.Node}
 }
 
 // BoolNode holds a boolean constant.

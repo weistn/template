@@ -15,6 +15,8 @@ import (
 	"sync"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/weistn/template/parse"
 )
 
 // FuncMap is the type of the map defining the mapping from names to functions.
@@ -59,7 +61,8 @@ func builtins() FuncMap {
 		"ne": ne, // !=
 
 		// Map, reduce, etc.
-		"map": mapFunc,
+		"map":    mapFunc,
+		"reduce": reduceFunc,
 	}
 }
 
@@ -339,12 +342,11 @@ func call(fn reflect.Value, args ...reflect.Value) (reflect.Value, error) {
 		}
 	}
 	numIn := typ.NumIn()
+	minNumIn := numIn
 	var dddType reflect.Type
 	if typ.IsVariadic() {
-		//		if len(args) < numIn-1 {
-		//			return reflect.Value{}, fmt.Errorf("wrong number of args: got %d want at least %d", len(args), numIn-1)
-		//		}
 		dddType = typ.In(numIn - 1).Elem()
+		minNumIn--
 	} else {
 		if functorArgsCount+len(args) > numIn {
 			return reflect.Value{}, fmt.Errorf("wrong number of args: got %d want %d", len(args), numIn)
@@ -367,8 +369,8 @@ func call(fn reflect.Value, args ...reflect.Value) (reflect.Value, error) {
 	if f != nil {
 		// Call the functor
 		return f.Call(args...)
-	} else if len(argv) < numIn {
-		// Start currying
+	} else if len(argv) < minNumIn {
+		// Start currying, because some required arguments are missing
 		return reflect.ValueOf(newCurryingFunctor(fn, typ, args)), nil
 	}
 	return safeCall(fn, argv)
@@ -376,6 +378,8 @@ func call(fn reflect.Value, args ...reflect.Value) (reflect.Value, error) {
 
 // Functor is the interface of an object that behaves like a function.
 type Functor interface {
+	// Call expects additional arguments which match the type of the underlying function.
+	// Some arguments might already be given due to currying.
 	Call(additional ...reflect.Value) (reflect.Value, error)
 	// Type returns the function type of the underlying function
 	Type() reflect.Type
@@ -386,30 +390,44 @@ type Functor interface {
 	ArgsCount() int
 }
 
-// curryingFunctor implements the Functor interface.
-type curryingFunctor struct {
-	typ  reflect.Type
-	fun  reflect.Value
-	args []reflect.Value
+// functor implements the Functor interface.
+type functor struct {
+	typ         reflect.Type
+	fun         reflect.Value
+	args        []reflect.Value
+	lambda      *parse.LambdaNode
+	lambdaState *state
 }
 
 func newCurryingFunctor(fn reflect.Value, typ reflect.Type, args []reflect.Value) Functor {
-	return &curryingFunctor{fun: fn, typ: typ, args: args}
+	return &functor{fun: fn, typ: typ, args: args}
 }
 
-func (f *curryingFunctor) Function() reflect.Value {
+func dummyFunc(dot reflect.Value, additional ...reflect.Value) reflect.Value {
+	panic("Never call me")
+}
+
+var lambdaType = reflect.TypeOf(dummyFunc)
+
+func newLambdaFunctor(lambdaState *state, lambda *parse.LambdaNode) Functor {
+	return &functor{lambda: lambda, typ: lambdaType, lambdaState: lambdaState}
+}
+
+func (f *functor) Function() reflect.Value {
 	return f.fun
 }
 
-func (f *curryingFunctor) Type() reflect.Type {
+func (f *functor) Type() reflect.Type {
 	return f.typ
 }
 
-func (f *curryingFunctor) ArgsCount() int {
+func (f *functor) ArgsCount() int {
 	return len(f.args)
 }
 
-func (f *curryingFunctor) Call(additional ...reflect.Value) (reflect.Value, error) {
+var varNames = []string{"$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9"}
+
+func (f *functor) Call(additional ...reflect.Value) (reflect.Value, error) {
 	argCount := len(f.args) + len(additional)
 	numIn := f.typ.NumIn()
 	if argCount > numIn && !f.typ.IsVariadic() {
@@ -426,48 +444,26 @@ func (f *curryingFunctor) Call(additional ...reflect.Value) (reflect.Value, erro
 	}
 	if argCount < numIn {
 		var r Functor
-		r = &curryingFunctor{typ: f.typ, fun: f.fun, args: newArgs}
+		r = &functor{typ: f.typ, fun: f.fun, args: newArgs}
 		return reflect.ValueOf(r), nil
+	}
+	// Calling a lambda function?
+	if f.lambda != nil {
+		mark := f.lambdaState.mark()
+		for i, arg := range newArgs {
+			if i < len(varNames) {
+				f.lambdaState.push(varNames[i], arg)
+			} else {
+				f.lambdaState.push(fmt.Sprintf("$%v", i), arg)
+			}
+		}
+		// TODO: Recover error
+		val := f.lambdaState.evalPipeline(newArgs[0], f.lambda.Node)
+		f.lambdaState.pop(mark)
+		return val, nil
 	}
 	return safeCall(f.fun, newArgs)
 }
-
-/*
-func (f *functor) quickCall(args []reflect.Value) (reflect.Value, error) {
-	argCount := len(f.args)
-	numIn := f.typ.NumIn()
-	copy(args, f.args)
-	if argCount > numIn && !f.typ.IsVariadic() {
-		return reflect.Value{}, fmt.Errorf("wrong number of args: got %d want %d", len(f.args), numIn)
-	}
-	if argCount < numIn {
-		var r Functor
-		r = &functor{typ: f.typ, fun: f.fun, args: args}
-		return reflect.ValueOf(r), nil
-	}
-	return safeCall(f.fun, args)
-}
-*/
-
-/*
-func currying(fun reflect.Value, args []reflect.Value, numIn int, variadic bool) (val reflect.Value, err error) {
-	return reflect.ValueOf(func(additional ...[]reflect.Value) (reflect.Value, error) {
-		argCount := len(args) + len(additional)
-		if argCount > numIn && !variadic {
-			return reflect.Value{}, fmt.Errorf("wrong number of args: got %d want %d", len(args), numIn)
-		}
-		newArgs := make([]reflect.Value, 0, argCount)
-		copy(newArgs, args)
-		for _, v := range additional {
-			newArgs = append(newArgs, reflect.ValueOf(v))
-		}
-		if argCount < numIn {
-			return currying(fun, newArgs, numIn, variadic)
-		}
-		return safeCall(fun, newArgs)
-	}), nil
-}
-*/
 
 // safeCall runs fun.Call(args), and returns the resulting value and error, if
 // any. If the call panics, the panic value is returned as an error.
@@ -551,6 +547,28 @@ func mapFunc(fun Functor, list reflect.Value) (reflect.Value, error) {
 		return reflect.Value{}, fmt.Errorf("`map` expects a slice or array as second argument")
 	}
 	return reflect.ValueOf(result), nil
+}
+
+func reduceFunc(fun Functor, list reflect.Value) (reflect.Value, error) {
+	args := make([]reflect.Value, 2)
+	typ := list.Type()
+	if typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
+		l := list.Len()
+		if l == 0 {
+			return reflect.Value{}, nil
+		}
+		args[0] = list.Index(0)
+		for i := 1; i < l; i++ {
+			args[1] = list.Index(i)
+			var err error
+			args[0], err = fun.Call(args...)
+			if err != nil {
+				return reflect.Value{}, err
+			}
+		}
+		return args[0], nil
+	}
+	return reflect.Value{}, fmt.Errorf("`reduce` expects a slice or array as second argument")
 }
 
 // Comparison.

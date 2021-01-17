@@ -22,6 +22,10 @@ func prefix(count int, str string) string {
 	return str[:count]
 }
 
+func addTwo(a int, b int) int {
+	return a + b
+}
+
 func TestCallFunctor(t *testing.T) {
 	template, err := New("root").Delims("{{", "}}").Parse("{{ $one := call . 2 }}{{ $two := call $one 3 }}{{ call $two 4 }}")
 	if err != nil {
@@ -33,7 +37,6 @@ func TestCallFunctor(t *testing.T) {
 		t.Fatal(err)
 	}
 	if w.String() != "9" {
-		println(">>>>" + w.String() + "<<<<<")
 		t.Fatal(w.String())
 	}
 }
@@ -44,7 +47,6 @@ func TestFunctorConversion(t *testing.T) {
 	funcMap := FuncMap{
 		"fn": withFunctor,
 	}
-	// template, err := New("root").Delims("{{", "}}").Funcs(funcMap).Parse("Hello {{ $one := call threeAdic 2 }} {{ $two := call $one 3 }} {{ printf \"Depp\" }}")
 	template, err := New("root").Delims("{{", "}}").Funcs(funcMap).Parse("{{ fn . }}")
 	if err != nil {
 		t.Fatal(err)
@@ -91,6 +93,60 @@ func TestMapFunc(t *testing.T) {
 		t.Fatal(err)
 	}
 	if w.String() != "Hcw" {
+		t.Fatal(w.String())
+	}
+}
+
+func TestReduceFunc1(t *testing.T) {
+	funcMap := FuncMap{
+		"add": addTwo,
+	}
+	template, err := New("root").Delims("{{", "}}").Funcs(funcMap).Parse("{{ reduce (call add) . }}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := bytes.NewBuffer(nil)
+	err = template.Execute(w, []int{2, 3, 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.String() != "9" {
+		t.Fatal(w.String())
+	}
+}
+
+func TestReduceFunc2(t *testing.T) {
+	funcMap := FuncMap{
+		"add": addTwo,
+	}
+	template, err := New("root").Delims("{{", "}}").Funcs(funcMap).Parse("{{ reduce add . }}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := bytes.NewBuffer(nil)
+	err = template.Execute(w, []int{2, 3, 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.String() != "9" {
+		t.Fatal(w.String())
+	}
+}
+
+func TestLambdaFunc(t *testing.T) {
+	funcMap := FuncMap{
+		"add": addTwo,
+	}
+	template, err := New("root").Delims("{{", "}}").Funcs(funcMap).Parse("{{reduce &(add $0 $1) .}}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := bytes.NewBuffer(nil)
+	err = template.Execute(w, []int{2, 3, 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.String() != "9" {
 		t.Fatal(w.String())
 	}
 }
