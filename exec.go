@@ -694,7 +694,7 @@ func (s *state) evalCall(dot, fun reflect.Value, node parse.Node, name string, a
 		numFixed = typ.NumIn() - functorArgsCount - 1 // last arg is the variadic one.
 		minNumIn--
 	} else if functorArgsCount+argsCount > typ.NumIn() {
-		s.errorf("wrong number of args for %s: want %d got %d", name, typ.NumIn(), argsCount)
+		s.errorf("wrong number of args for %s: want %d got %d", name, typ.NumIn(), functorArgsCount+argsCount)
 	}
 	if !goodFunc(typ) {
 		// TODO: This could still be a confusing error; maybe goodFunc should provide info.
@@ -728,7 +728,7 @@ func (s *state) evalCall(dot, fun reflect.Value, node parse.Node, name string, a
 				t = typ.In(typ.NumIn() - 1).Elem()
 			}
 		} else {
-			t = typ.In(functorArgsCount + argsCount)
+			t = typ.In(functorArgsCount + argsCount - 1)
 		}
 		argv[i] = s.validateType(final, t)
 	}

@@ -532,31 +532,31 @@ func not(arg reflect.Value) bool {
 
 // Map, reduec etc.
 
-func mapFunc(fun Functor, list reflect.Value) (reflect.Value, error) {
+func mapFunc(fun Functor, list reflect.Value) ([]interface{}, error) {
 	args := make([]reflect.Value, 1)
-	var result []reflect.Value
 	typ := list.Type()
-	if typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
+	switch typ.Kind() {
+	case reflect.Slice, reflect.Array:
 		l := list.Len()
-		result = make([]reflect.Value, l)
+		result := make([]interface{}, l)
 		for i := 0; i < l; i++ {
 			args[0] = list.Index(i)
-			var err error
-			result[i], err = fun.Call(args...)
+			r, err := fun.Call(args...)
 			if err != nil {
-				return reflect.Value{}, err
+				return nil, err
 			}
+			result[i] = r.Interface()
 		}
-	} else {
-		return reflect.Value{}, fmt.Errorf("`map` expects a slice or array as second argument")
+		return result, nil
 	}
-	return reflect.ValueOf(result), nil
+	return nil, fmt.Errorf("`map` expects a slice or array as second argument")
 }
 
 func reduceFunc(fun Functor, list reflect.Value) (reflect.Value, error) {
 	args := make([]reflect.Value, 2)
 	typ := list.Type()
-	if typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
+	switch typ.Kind() {
+	case reflect.Slice, reflect.Array:
 		l := list.Len()
 		if l == 0 {
 			return reflect.Value{}, nil
@@ -575,30 +575,31 @@ func reduceFunc(fun Functor, list reflect.Value) (reflect.Value, error) {
 	return reflect.Value{}, fmt.Errorf("`reduce` expects a slice or array as second argument")
 }
 
-func filterFunc(fun Functor, list reflect.Value) (reflect.Value, error) {
+func filterFunc(fun Functor, list reflect.Value) ([]interface{}, error) {
 	args := make([]reflect.Value, 1)
-	var result []reflect.Value
+	var result []interface{}
 	typ := list.Type()
-	if typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
+	switch typ.Kind() {
+	case reflect.Slice, reflect.Array:
 		l := list.Len()
 		for i := 0; i < l; i++ {
 			args[0] = list.Index(i)
 			r, err := fun.Call(args...)
 			if err != nil {
-				return reflect.Value{}, err
+				return nil, err
 			}
 			t, ok := isTrue(r)
 			if !ok {
-				return reflect.Value{}, fmt.Errorf("The function passed to `filter` did not return a boolean value")
+				return nil, fmt.Errorf("The function passed to `filter` did not return a boolean value")
 			}
 			if t {
-				result = append(result, args[0])
+				result = append(result, args[0].Interface())
 			}
 		}
-	} else {
-		return reflect.Value{}, fmt.Errorf("`filter` expects a slice or array as second argument")
+	default:
+		return nil, fmt.Errorf("`filter` expects a slice or array as second argument")
 	}
-	return reflect.ValueOf(result), nil
+	return result, nil
 }
 
 // Comparison.
