@@ -63,6 +63,7 @@ func builtins() FuncMap {
 		// Map, reduce, etc.
 		"map":    mapFunc,
 		"reduce": reduceFunc,
+		"filter": filterFunc,
 	}
 }
 
@@ -430,6 +431,9 @@ var varNames = []string{"$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$
 func (f *functor) Call(additional ...reflect.Value) (reflect.Value, error) {
 	argCount := len(f.args) + len(additional)
 	numIn := f.typ.NumIn()
+	if f.typ.IsVariadic() {
+		numIn--
+	}
 	if argCount > numIn && !f.typ.IsVariadic() {
 		return reflect.Value{}, fmt.Errorf("wrong number of args: got %d want %d", len(f.args), numIn)
 	}
@@ -569,6 +573,32 @@ func reduceFunc(fun Functor, list reflect.Value) (reflect.Value, error) {
 		return args[0], nil
 	}
 	return reflect.Value{}, fmt.Errorf("`reduce` expects a slice or array as second argument")
+}
+
+func filterFunc(fun Functor, list reflect.Value) (reflect.Value, error) {
+	args := make([]reflect.Value, 1)
+	var result []reflect.Value
+	typ := list.Type()
+	if typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
+		l := list.Len()
+		for i := 0; i < l; i++ {
+			args[0] = list.Index(i)
+			r, err := fun.Call(args...)
+			if err != nil {
+				return reflect.Value{}, err
+			}
+			t, ok := isTrue(r)
+			if !ok {
+				return reflect.Value{}, fmt.Errorf("The function passed to `filter` did not return a boolean value")
+			}
+			if t {
+				result = append(result, args[0])
+			}
+		}
+	} else {
+		return reflect.Value{}, fmt.Errorf("`filter` expects a slice or array as second argument")
+	}
+	return reflect.ValueOf(result), nil
 }
 
 // Comparison.

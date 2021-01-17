@@ -97,6 +97,24 @@ func TestMapFunc(t *testing.T) {
 	}
 }
 
+func TestFilterFunc(t *testing.T) {
+	funcMap := FuncMap{
+		"prefix": prefix,
+	}
+	template, err := New("root").Delims("{{", "}}").Funcs(funcMap).Parse("{{ range filter &(eq \"H\" (prefix 1 .)) . }}{{.}}{{end}}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := bytes.NewBuffer(nil)
+	err = template.Execute(w, []string{"Hello", "cruel", "world", "Haha"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.String() != "HelloHaha" {
+		t.Fatal(w.String())
+	}
+}
+
 func TestReduceFunc1(t *testing.T) {
 	funcMap := FuncMap{
 		"add": addTwo,
